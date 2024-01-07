@@ -30,16 +30,37 @@ global stock
 stock = {}
 
 
+# Funcion para ordenar el diccionario por medio del numero id/codigo de producto
+def ordenar_stock(stock):
+    return dict(sorted(stock.items(), key=lambda item: int(item[0])))
+
+
 # Funcion para dar de alta un prodcuto
 def alta(stock, producto, id_prod, cantidad, tree):
     # Aplicar la función regex para validar el campo producto permitiendo letras, numeros, caracteres
-    patron = "^[A-Za-záéíóúñÑ0-9\s/_']+$"
+    patron_producto = "^[A-Za-záéíóúñÑ0-9\s/_']+$"
     # Si en el campo producto se ingresan caracteres no correspondientes se le informa con una notificación
-    if not re.fullmatch(patron, producto):
+    if not re.fullmatch(patron_producto, producto):
         mostrar_notificacion(
             "Elemento no válido. Solo letras incluida la ñ, números, caracteres /, _, ' y espacios permitidos."
         )
         print("Alta = Elemento no valido")
+        return False
+
+    # Aplicar la función regex para validar el campo id/codigo permitiendo solo numeros
+    patron_id_prod = "^[0-9]+$"
+    # Si en el campo cantidad se ingresan caracteres no correspondientes se le informa con una notificación
+    if not re.fullmatch(patron_id_prod, id_prod):
+        mostrar_notificacion("Id/Codigo no válido. Solo números enteros permitidos.")
+        print("Alta = cantidad no valida")
+        return False
+
+    # Aplicar la función regex para validar el campo cantidad permitiendo solo numeros
+    patron_cantidad = "^[0-9]+$"
+    # Si en el campo cantidad se ingresan caracteres no correspondientes se le informa con una notificación
+    if not re.fullmatch(patron_cantidad, cantidad):
+        mostrar_notificacion("Cantidad no válida. Solo números enteros permitidos.")
+        print("Alta = cantidad no valida")
         return False
 
     # Verifica si el ID del producto ya existe en el stock
@@ -50,6 +71,8 @@ def alta(stock, producto, id_prod, cantidad, tree):
         # Si no existe, agrega el producto al stock
         stock[id_prod] = (producto, cantidad)
 
+    # Muestra los productos ordenados en el treeview
+    actualizar_treeview()
     # Limpia campos de entrada luego de dar de alta un producto.
     limpiar_campos()
     return True
@@ -124,6 +147,15 @@ def guardar_inventario(stock, archivo):
         # Escribe en el archivo el ID, producto y cantidad en la lista del diccionario.
         for id_prod, (producto, cantidad) in stock.items():
             f.write(f"{id_prod},{producto},{cantidad}\n")
+
+
+# Función para manejar el botón de guardar.
+def guardar_inventario_actualizado():
+    global stock
+    # Guarda el inventario actualizado.
+    guardar_inventario(stock, "inventario.txt")
+    # Muestra una notificación indicando que se guardaron los cambios.
+    mostrar_notificacion("Inventario guardado con éxito.")
 
 
 # Función para cargar el inventario desde un archivo.
@@ -235,9 +267,9 @@ def guardar_y_mostrar():
     global stock, tree
 
     # Obtener valores de los campos de entrada.
-    id_prod = int(entrada_codigo.get())
+    id_prod = entrada_codigo.get()
     producto = entrada_producto.get()
-    cantidad = int(entrada_cantidad.get())
+    cantidad = entrada_cantidad.get()
 
     # Llama a la función alta
     if alta(stock, producto, id_prod, cantidad, tree) is True:
@@ -253,12 +285,16 @@ def guardar_y_mostrar():
 # Función para mostrar el inventario actualizado en el treeview, ya sea creado o modificado.
 def actualizar_treeview():
     global tree
+    global stock
     # Elimina todas las filas existentes en el treeview para actualizarlo.
     for item in tree.get_children():
         tree.delete(item)
 
+    # Variable para identidicar las filas pares de las impares.
+    fondo_par = True
+
     # Agrega las filas actualizadas al treeview.
-    for producto_id, (producto, cantidad) in stock.items():
+    for producto_id, (producto, cantidad) in ordenar_stock(stock).items():
         # Inserta una nueva fila en el treeview con los valores del producto actual.
         tree.insert(
             "",  # El primer argumento es el ID.
@@ -271,9 +307,10 @@ def actualizar_treeview():
             ),
             # Etiqueta que determina el color de fondo de la fila.
             tags=(
-                "odd" if int(producto_id) % 2 == 1 else "even"
+                "odd" if fondo_par else "even"
             ),  # Se utilizan las etiquetas "odd" y "even" para poder asignarles configuraciones de color.
         )
+        fondo_par = not fondo_par  # Alterna el fondo para la próxima fila.
 
         # Agrega los colores de fondo para las filas impares y pares.
         tree.tag_configure("odd", background="#E8E8E8")  # Fondo gris claro.
@@ -287,34 +324,38 @@ def limpiar_campo_consulta():
 
 # Función para realizar la consulta y mostrar los resultados en el treeview de consulta.
 def realizar_consulta():
-    global consulta_entry, tree
+    global consulta_entry, tree, inventario
 
     # Obtiene la palabra clave de la entrada de consulta.
     # Toma la palabra clave y se convierte a minúsculas.
-    palabra_clave = consulta_entry.get().lower()
+    # .strip() verifica si el campo de consulta no esta vacio
+    palabra_clave = consulta_entry.get().lower().strip()
 
-    # Si no se encuentra ninguna busqueda en campo consulta realiza una notificacion
-    if not palabra_clave:
+    # Inicializa la variable resultados en una lista vacia.
+    resultados = []
+
+    # Recopila los valores coincidentes en una lista.
+    if palabra_clave:
+        resultados = [
+            (producto_id, elemento, cantidad)
+            for producto_id, (elemento, cantidad) in inventario.items()
+            if palabra_clave in elemento.lower()
+        ]
+
+        # Limpia el treeview de consulta antes de agregar nuevos resultados.
+        for i in tree.get_children():
+            tree.delete(i)
+
+        # Agrega los resultados al treeview de consulta.
+        for resultado in resultados:
+            tree.insert("", "end", values=resultado, tags=(resultado[0] % 2))
+        # Luego de realizar la consulta limpia el formulario de entrada.
+        limpiar_campo_consulta()
+    else:
+        # Si no se encuentra ninguna busqueda en campo consulta realiza una notificacion
         mostrar_notificacion(
             " No ha ingresado la palabra clave\n Recuerde que puede consultar por nombre o id"
         )
-
-    # Recopila los valores coincidentes en una lista.
-    resultados = [
-        (producto_id, producto, cantidad)
-        for producto_id, (producto, cantidad) in inventario.items()
-        if palabra_clave in producto.lower()
-    ]
-
-    # Limpia el treeview de consulta antes de agregar nuevos resultados.
-    for i in tree.get_children():
-        tree.delete(i)
-
-    # Agrega los resultados al treeview de consulta.
-    for resultado in resultados:
-        tree.insert("", "end", values=resultado, tags=(resultado[0] % 2))
-    # Luego de realizar la consulta limpia el formulario de entrada.
-    limpiar_campo_consulta()
 
 
 # Función para modificar un elemento seleccionado.
@@ -322,10 +363,6 @@ def modificar_seleccionado():
     global tree
     # Obtiene la selección actual en el treeview de consulta.
     seleccion = tree.selection()
-
-    # Si no se ha seleccionado ningun producto muestra una notificacion.
-    if not seleccion:
-        mostrar_notificacion(" No se ha seleccionado ningun producto")
 
     # Verifica si hay una selección.
     if seleccion:
@@ -351,10 +388,10 @@ def modificar_seleccionado():
         if nueva_cantidad is not None and nuevo_producto is not None:
             # Realiza la modificación en el inventario.
             modificar_producto(producto_id, nueva_cantidad, nuevo_producto)
-            # Consulta datos con la funcion realizar consulta.
-            realizar_consulta()
             # Actualiza el treeview de consulta.
             actualizar_treeview()
+    else:
+        mostrar_notificacion("No se ha seleccionado ningun producto")
 
 
 # Función para abrir el archivo donde se guardan los datos/inventario.
@@ -409,6 +446,12 @@ tree_scrollbar = Scrollbar(root, command=tree.yview)
 tree.configure(yscrollcommand=tree_scrollbar.set)
 tree_scrollbar.grid(row=10, column=4, sticky="ns")
 
+# Crea una barra de separacion
+separador = ttk.Separator(
+    root,
+    orient=HORIZONTAL,
+)
+separador.grid(row=6, pady=4)
 # Muestra el inventario en el treeview después de cargarlo al iniciar la aplicacion.
 archivo = filedialog.askopenfilename(
     title="Abrir archivo",
@@ -440,7 +483,7 @@ boton_borrar = Button(
     activeforeground="red",
     command=lambda: eliminar_elemento(),
 )
-boton_borrar.grid(row=2, column=2)
+boton_borrar.grid(row=2, column=2, pady=(1, 0))
 
 # Crea el botón para modificar el elemento seleccionado O ingresando en los campos de producto y codigo.
 global modificar_boton
@@ -450,7 +493,7 @@ modificar_boton = Button(
     activeforeground="cyan",
     command=lambda: modificar_seleccionado(),
 )
-modificar_boton.grid(row=3, column=2)
+modificar_boton.grid(row=3, column=2, pady=(1, 0))
 
 # Boton para realizar una consulta sobre un producto.
 global boton_consulta
@@ -461,7 +504,7 @@ boton_consulta = Button(
     activeforeground="yellow",
     command=lambda: realizar_consulta(),
 )
-boton_consulta.grid(row=4, column=2)
+boton_consulta.grid(row=4, column=2, pady=(1, 0))
 
 # Boton para poder actualizar el inventario luego de realizar una consulta.
 global boton_actualizar
@@ -472,7 +515,7 @@ boton_consulta = Button(
     activeforeground="deep pink",
     command=lambda: actualizar_treeview(),
 )
-boton_consulta.grid(row=5, column=2)
+boton_consulta.grid(row=5, column=2, pady=(1, 0))
 
 # Botón para abrir el archivo del inventario en caso de ser necesario.
 global abrir_archivo_boton
@@ -483,6 +526,17 @@ abrir_archivo_boton = Button(
     command=lambda: abrir_archivo(),
 )
 abrir_archivo_boton.grid(row=1, column=3)
+
+# Botón para guardar el inventario.
+boton_guardar = Button(
+    root,
+    text="Guardar",
+    width=10,
+    activeforeground="blue",
+    command=lambda: guardar_inventario_actualizado(),
+)
+boton_guardar.grid(row=2, column=3, pady=(1, 0))
+
 
 # Bucle principal
 root.mainloop()
